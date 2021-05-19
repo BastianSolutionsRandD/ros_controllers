@@ -111,6 +111,38 @@ namespace diff_drive_controller
     return true;
   }
 
+  bool Odometry::updateFromVelocity(double left_vel, double right_vel, const ros::Time &time)
+  {
+    /// Convert joint velocity to rigid body velocity
+    const double left_wheel_est_vel  = left_vel  * left_wheel_radius_;
+    const double right_wheel_est_vel = right_vel * right_wheel_radius_;
+
+    /// Compute linear and angular diff:
+    const double linear  = (right_wheel_est_vel + left_wheel_est_vel) * 0.5 ;
+    const double angular = (right_wheel_est_vel - left_wheel_est_vel) / wheel_separation_;
+
+    /// Integrate odometry:
+    const double dt = (time - timestamp_).toSec();
+    timestamp_ = time;
+    integrate_fun_(linear * dt, angular * dt);
+
+    linear_ = linear;
+    angular_ = angular;
+
+    /*
+     * Rolling average on velocity feedback - unsure if necessary?
+     *
+    /// Estimate speeds using a rolling mean to filter them out:
+    linear_acc_(linear);
+    angular_acc_(angular);
+
+    linear_ = bacc::rolling_mean(linear_acc_);
+    angular_ = bacc::rolling_mean(angular_acc_);
+    */
+   
+    return true;
+  }
+
   void Odometry::updateOpenLoop(double linear, double angular, const ros::Time &time)
   {
     /// Save last linear and angular velocity:

@@ -146,6 +146,7 @@ namespace diff_drive_controller{
 
   DiffDriveController::DiffDriveController()
     : open_loop_(false)
+    , odom_use_velocity_feedback_(false)
     , command_struct_()
     , wheel_separation_(0.0)
     , wheel_radius_(0.0)
@@ -202,6 +203,7 @@ namespace diff_drive_controller{
     publish_period_ = ros::Duration(1.0 / publish_rate);
 
     controller_nh.param("open_loop", open_loop_, open_loop_);
+    controller_nh.param("odom_use_velocity_feedback", odom_use_velocity_feedback_, odom_use_velocity_feedback_);
 
     controller_nh.param("wheel_separation_multiplier", wheel_separation_multiplier_, wheel_separation_multiplier_);
     ROS_INFO_STREAM_NAMED(name_, "Wheel separation will be multiplied by "
@@ -404,6 +406,27 @@ namespace diff_drive_controller{
     {
       odometry_.updateOpenLoop(last0_cmd_.lin, last0_cmd_.ang, time);
     }
+    else if (odom_use_velocity_feedback_)
+    {
+      // Get velocity feedback from all joints and compute the average of each side
+      double left_vel  = 0.0;
+      double right_vel = 0.0;
+      for (size_t i = 0; i < wheel_joints_size_; ++i)
+      {
+        const double lv = left_wheel_joints_[i].getVelocity();
+        const double rv = right_wheel_joints_[i].getVelocity();
+        if (std::isnan(lv) || std::isnan(rv))
+          return;
+
+        left_vel  += lv;
+        right_vel += rv;
+      }
+      left_vel  /= wheel_joints_size_;
+      right_vel /= wheel_joints_size_;
+
+      // Estimate linear and angular velocity using joint velocity information
+      odometry_.updateFromVelocity(left_vel, right_vel, time);
+    }
     else
     {
       double left_pos  = 0.0;
@@ -421,7 +444,7 @@ namespace diff_drive_controller{
       left_pos  /= wheel_joints_size_;
       right_pos /= wheel_joints_size_;
 
-      // Estimate linear and angular velocity using joint information
+      // Estimate linear and angular velocity using joint position information
       odometry_.update(left_pos, right_pos, time);
     }
 
